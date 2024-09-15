@@ -28,6 +28,9 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
 
     mapping(bytes32 => uint256) public nameReservationExpiry;
 
+    uint256 public constant SHORT_NAME_THRESHOLD = 6;
+    uint256 public constant SHORT_NAME_MULTIPLIER = 10;
+
     ////////////////////////////////
     // EVENTS
 
@@ -54,7 +57,7 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
         _setRoleAdmin(PAGES_ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
         _grantRole(PAGES_ADMIN_ROLE, _owner);
 
-        reservationCostPerMonth = 0.1 ether; // Set initial cost
+        reservationCostPerMonth = 0.005 ether; // Set initial cost
     }
 
     ////////////////////////////////
@@ -164,7 +167,7 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
     function reserveName(bytes32 _pageId, string memory _name, uint256 _months)
         public
         payable
-        onlyPageOwner(_pageId)
+        onlyPageOwnerOrAdminOrOwner(_pageId)
         onlyNotBlacklisted
     {
         require(bytes(_name).length > 0, "Name cannot be empty");
@@ -172,8 +175,15 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
         require(isUrlSafe(_name), "Name must be URL-safe");
         require(_months == 1 || _months == 12, "Reservation must be for 1 or 12 months");
 
-        uint256 cost = calculateReservationCost(_months);
-        require(msg.value >= cost, "Insufficient payment");
+        uint256 cost = calculateReservationCost(_months, _name);
+
+        // Check if the caller is the owner or pages admin
+        bool isOwnerOrAdmin = (msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender));
+
+        // Only require payment if the caller is not the owner or pages admin
+        if (!isOwnerOrAdmin) {
+            require(msg.value >= cost, "Insufficient payment");
+        }
 
         _reservedNames[_name] = _pageId;
         _pageNames[_pageId] = _name;
@@ -183,27 +193,35 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
 
         emit NameReserved(_pageId, _name, expiryTimestamp);
 
-        // Refund excess payment
-        if (msg.value > cost) {
+        // Refund excess payment if applicable
+        if (!isOwnerOrAdmin && msg.value > cost) {
             payable(msg.sender).transfer(msg.value - cost);
         }
     }
 
     /**
-     * @dev Calculates the cost of name reservation based on the number of months.
+     * @dev Calculates the cost of name reservation based on the number of months and the name length.
      * @param _months The number of months for reservation (1 or 12).
+     * @param _name The name to be reserved.
      * @return The cost in wei for the reservation.
      */
-    function calculateReservationCost(uint256 _months) public view returns (uint256) {
+    function calculateReservationCost(uint256 _months, string memory _name) public view returns (uint256) {
+        uint256 baseCost;
         if (_months == 1) {
-            return reservationCostPerMonth;
+            baseCost = reservationCostPerMonth;
         } else if (_months == 12) {
             uint256 annualCost = reservationCostPerMonth * 12;
             uint256 discount = (annualCost * RESERVATION_DISCOUNT_12_MONTHS) / 100;
-            return annualCost - discount;
+            baseCost = annualCost - discount;
         } else {
             revert("Invalid reservation period");
         }
+
+        if (bytes(_name).length < SHORT_NAME_THRESHOLD) {
+            return baseCost * SHORT_NAME_MULTIPLIER;
+        }
+
+        return baseCost;
     }
 
     /**
@@ -211,13 +229,9 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
      * @param _name The name to be released.
      * @notice This function can only be called by the page owner of the reserved name and addresses that are not blacklisted.
      */
-    function releaseName(string memory _name) public onlyNotBlacklisted {
+    function releaseName(string memory _name) public onlyPageOwnerOrAdminOrOwner(getReservedName(_name)) {
         bytes32 pageId = getReservedName(_name);
         require(pageId != bytes32(0), "Name not reserved");
-        require(
-            msg.sender == pageOwners[pageId] || msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender),
-            "Only page owner, contract owner, or pages admin can release the name"
-        );
 
         delete _reservedNames[_name];
         delete _pageNames[pageId];
@@ -318,6 +332,15 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
         );
         _;
     }
+
+    modifier onlyPageOwnerOrAdminOrOwner(bytes32 _pageId) {
+        require(
+            msg.sender == pageOwners[_pageId] || msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender),
+            "Only page owner, contract owner, or pages admin can perform this action"
+        );
+        _;
+    }
+
     ////////////////////////////////
     // UPGRADE
 

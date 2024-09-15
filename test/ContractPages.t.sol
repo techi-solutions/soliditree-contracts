@@ -99,7 +99,7 @@ contract ContractPagesTest is Test {
 
         string memory name = "test-name";
         uint256 months = 1;
-        uint256 cost = contractPages.calculateReservationCost(months);
+        uint256 cost = contractPages.calculateReservationCost(months, name);
 
         vm.deal(user1, cost);
         contractPages.reserveName{value: cost}(pageId, name, months);
@@ -120,7 +120,7 @@ contract ContractPagesTest is Test {
 
         string memory name = "test-name";
         uint256 months = 1;
-        uint256 cost = contractPages.calculateReservationCost(months);
+        uint256 cost = contractPages.calculateReservationCost(months, name);
 
         vm.deal(user1, cost);
         contractPages.reserveName{value: cost}(pageId, name, months);
@@ -225,7 +225,7 @@ contract ContractPagesTest is Test {
 
         string memory name = "test-name";
         uint256 months = 1;
-        uint256 cost = contractPages.calculateReservationCost(months);
+        uint256 cost = contractPages.calculateReservationCost(months, name);
 
         vm.deal(user1, cost * 2);
         contractPages.reserveName{value: cost}(pageId, name, months);
@@ -239,7 +239,7 @@ contract ContractPagesTest is Test {
         vm.startPrank(user1);
         string memory name = "unreserved-name";
 
-        vm.expectRevert("Name not reserved");
+        vm.expectRevert("Only page owner, contract owner, or pages admin can perform this action");
         contractPages.releaseName(name);
         vm.stopPrank();
     }
@@ -273,7 +273,7 @@ contract ContractPagesTest is Test {
 
         string memory name = "test-name";
         uint256 months = 1;
-        uint256 cost = contractPages.calculateReservationCost(months);
+        uint256 cost = contractPages.calculateReservationCost(months, name);
 
         vm.deal(user1, cost - 1);
         vm.expectRevert("Insufficient payment");
@@ -325,5 +325,40 @@ contract ContractPagesTest is Test {
         vm.prank(user2);
         vm.expectRevert("Not page owner");
         contractPages.destroyPage(pageId);
+    }
+
+    function testCalculateReservationCost() public {
+        // Test 1 month reservation for regular name
+        uint256 cost = contractPages.calculateReservationCost(1, "regular-name");
+        assertEq(cost, 0.005 ether, "1 month regular name cost incorrect");
+
+        // Test 12 months reservation for regular name (20% discount)
+        cost = contractPages.calculateReservationCost(12, "regular-name");
+        assertEq(cost, 0.048 ether, "12 months regular name cost incorrect");
+
+        // Test 1 month reservation for short name (10x multiplier)
+        cost = contractPages.calculateReservationCost(1, "short");
+        assertEq(cost, 0.05 ether, "1 month short name cost incorrect");
+
+        // Test 12 months reservation for short name (10x multiplier and 20% discount)
+        cost = contractPages.calculateReservationCost(12, "short");
+        assertEq(cost, 0.48 ether, "12 months short name cost incorrect");
+
+        // Test invalid reservation period
+        vm.expectRevert("Invalid reservation period");
+        contractPages.calculateReservationCost(6, "any-name");
+    }
+
+    function testCalculateReservationCostWithDifferentBaseCost() public {
+        // Change the base reservation cost
+        contractPages.updateReservationCost(0.01 ether);
+
+        // Test 1 month reservation for regular name with new base cost
+        uint256 cost = contractPages.calculateReservationCost(1, "regular-name");
+        assertEq(cost, 0.01 ether, "1 month regular name cost incorrect with new base cost");
+
+        // Test 12 months reservation for short name with new base cost
+        cost = contractPages.calculateReservationCost(12, "short");
+        assertEq(cost, 0.96 ether, "12 months short name cost incorrect with new base cost");
     }
 }
