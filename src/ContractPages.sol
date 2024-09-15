@@ -6,12 +6,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
-contract ContractPages is
-    Initializable,
-    OwnableUpgradeable,
-    UUPSUpgradeable,
-    AccessControlUpgradeable
-{
+contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, AccessControlUpgradeable {
     ////////////////////////////////
     // VARIABLES
     bytes32 public constant PAGES_ADMIN_ROLE = keccak256("PAGES_ADMIN_ROLE");
@@ -36,27 +31,12 @@ contract ContractPages is
     ////////////////////////////////
     // EVENTS
 
-    event PageCreated(
-        bytes32 indexed pageId,
-        address indexed owner,
-        address indexed contractAddress
-    );
-    event PageContentHashUpdated(
-        bytes32 indexed pageId,
-        bytes indexed contentHash
-    );
-    event PageOwnershipTransferred(
-        bytes32 indexed pageId,
-        address indexed owner,
-        address indexed newOwner
-    );
+    event PageCreated(bytes32 indexed pageId, address indexed owner, address indexed contractAddress);
+    event PageContentHashUpdated(bytes32 indexed pageId, bytes indexed contentHash);
+    event PageOwnershipTransferred(bytes32 indexed pageId, address indexed owner, address indexed newOwner);
     event PageDestroyed(bytes32 indexed pageId, address caller);
 
-    event NameReserved(
-        bytes32 indexed pageId,
-        string name,
-        uint256 expiryTimestamp
-    );
+    event NameReserved(bytes32 indexed pageId, string name, uint256 expiryTimestamp);
     event NameReleased(bytes32 indexed pageId, string name);
 
     event ReservationCostUpdated(uint256 newCost);
@@ -86,10 +66,7 @@ contract ContractPages is
      * @param _contentHash The content hash of the page.
      * @notice This function can only be called by addresses that are not blacklisted.
      */
-    function createPage(
-        address _contractAddress,
-        bytes memory _contentHash
-    ) public onlyNotBlacklisted {
+    function createPage(address _contractAddress, bytes memory _contentHash) public onlyNotBlacklisted {
         require(_contractAddress != address(0), "Invalid contract address");
         bytes32 _pageId = nextPageId(msg.sender, _contractAddress);
         pageOwners[_pageId] = msg.sender;
@@ -105,10 +82,11 @@ contract ContractPages is
      * @param _contentHash The new content hash for the page.
      * @notice This function can only be called by the page owner and addresses that are not blacklisted.
      */
-    function updatePageContentHash(
-        bytes32 _pageId,
-        bytes memory _contentHash
-    ) public onlyPageOwner(_pageId) onlyNotBlacklisted {
+    function updatePageContentHash(bytes32 _pageId, bytes memory _contentHash)
+        public
+        onlyPageOwner(_pageId)
+        onlyNotBlacklisted
+    {
         // Check if the page exists
         require(pageExists(_pageId), "Page does not exist");
 
@@ -172,9 +150,7 @@ contract ContractPages is
      * @param _address The address to be removed from the blacklist.
      * @notice This function can only be called by the contract owner or pages admin.
      */
-    function removeFromBlacklist(
-        address _address
-    ) public onlyOwnerOrPagesAdmin {
+    function removeFromBlacklist(address _address) public onlyOwnerOrPagesAdmin {
         blacklistedAddresses[_address] = false;
     }
 
@@ -185,18 +161,16 @@ contract ContractPages is
      * @param _months The number of months to reserve the name for (1 or 12).
      * @notice This function can only be called by the page owner and addresses that are not blacklisted.
      */
-    function reserveName(
-        bytes32 _pageId,
-        string memory _name,
-        uint256 _months
-    ) public payable onlyPageOwner(_pageId) onlyNotBlacklisted {
+    function reserveName(bytes32 _pageId, string memory _name, uint256 _months)
+        public
+        payable
+        onlyPageOwner(_pageId)
+        onlyNotBlacklisted
+    {
         require(bytes(_name).length > 0, "Name cannot be empty");
         require(getReservedName(_name) == bytes32(0), "Name already reserved");
         require(isUrlSafe(_name), "Name must be URL-safe");
-        require(
-            _months == 1 || _months == 12,
-            "Reservation must be for 1 or 12 months"
-        );
+        require(_months == 1 || _months == 12, "Reservation must be for 1 or 12 months");
 
         uint256 cost = calculateReservationCost(_months);
         require(msg.value >= cost, "Insufficient payment");
@@ -220,15 +194,12 @@ contract ContractPages is
      * @param _months The number of months for reservation (1 or 12).
      * @return The cost in wei for the reservation.
      */
-    function calculateReservationCost(
-        uint256 _months
-    ) public view returns (uint256) {
+    function calculateReservationCost(uint256 _months) public view returns (uint256) {
         if (_months == 1) {
             return reservationCostPerMonth;
         } else if (_months == 12) {
             uint256 annualCost = reservationCostPerMonth * 12;
-            uint256 discount = (annualCost * RESERVATION_DISCOUNT_12_MONTHS) /
-                100;
+            uint256 discount = (annualCost * RESERVATION_DISCOUNT_12_MONTHS) / 100;
             return annualCost - discount;
         } else {
             revert("Invalid reservation period");
@@ -244,9 +215,7 @@ contract ContractPages is
         bytes32 pageId = getReservedName(_name);
         require(pageId != bytes32(0), "Name not reserved");
         require(
-            msg.sender == pageOwners[pageId] ||
-                msg.sender == owner() ||
-                hasRole(PAGES_ADMIN_ROLE, msg.sender),
+            msg.sender == pageOwners[pageId] || msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender),
             "Only page owner, contract owner, or pages admin can release the name"
         );
 
@@ -264,14 +233,14 @@ contract ContractPages is
      */
     function isUrlSafe(string memory _str) internal pure returns (bool) {
         bytes memory strBytes = bytes(_str);
-        for (uint i = 0; i < strBytes.length; i++) {
+        for (uint256 i = 0; i < strBytes.length; i++) {
             bytes1 char = strBytes[i];
             if (
-                !(char >= 0x30 && char <= 0x39) && // 0-9
-                !(char >= 0x41 && char <= 0x5A) && // A-Z
-                !(char >= 0x61 && char <= 0x7A) && // a-z
-                !(char == 0x2D) && // -
-                !(char == 0x5F) // _
+                !(char >= 0x30 && char <= 0x39) // 0-9
+                    && !(char >= 0x41 && char <= 0x5A) // A-Z
+                    && !(char >= 0x61 && char <= 0x7A) // a-z
+                    && !(char == 0x2D) // -
+                    && !(char == 0x5F) // _
             ) {
                 return false;
             }
@@ -282,20 +251,9 @@ contract ContractPages is
     ////////////////////////////////
     // VIEW FUNCTIONS
 
-    function nextPageId(
-        address _owner,
-        address _contractAddress
-    ) public view returns (bytes32) {
+    function nextPageId(address _owner, address _contractAddress) public view returns (bytes32) {
         uint256 _counter = pageOwnerCounter[_owner] + 1;
-        return
-            keccak256(
-                abi.encodePacked(
-                    address(this),
-                    _owner,
-                    _contractAddress,
-                    _counter
-                )
-            );
+        return keccak256(abi.encodePacked(address(this), _owner, _contractAddress, _counter));
     }
 
     function getPageOwner(bytes32 _pageId) public view returns (address) {
@@ -307,14 +265,9 @@ contract ContractPages is
      * @param _name The name to look up.
      * @return The pageId associated with the name, or bytes32(0) if expired or not reserved.
      */
-    function getReservedName(
-        string memory _name
-    ) public view returns (bytes32) {
+    function getReservedName(string memory _name) public view returns (bytes32) {
         bytes32 pageId = _reservedNames[_name];
-        if (
-            pageId != bytes32(0) &&
-            block.timestamp > nameReservationExpiry[pageId]
-        ) {
+        if (pageId != bytes32(0) && block.timestamp > nameReservationExpiry[pageId]) {
             return bytes32(0);
         }
         return pageId;
@@ -341,10 +294,7 @@ contract ContractPages is
     }
 
     modifier onlyPageOwner(bytes32 _pageId) {
-        require(
-            msg.sender == pageOwners[_pageId],
-            "Only page owner can call this function"
-        );
+        require(msg.sender == pageOwners[_pageId], "Only page owner can call this function");
         _;
     }
 
@@ -357,10 +307,7 @@ contract ContractPages is
     }
 
     modifier onlyPagesAdmin() {
-        require(
-            hasRole(PAGES_ADMIN_ROLE, msg.sender),
-            "Only pages admin can call this function"
-        );
+        require(hasRole(PAGES_ADMIN_ROLE, msg.sender), "Only pages admin can call this function");
         _;
     }
 
@@ -374,9 +321,7 @@ contract ContractPages is
     ////////////////////////////////
     // UPGRADE
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     ////////////////////////////////
     // ROLE FUNCTIONS
