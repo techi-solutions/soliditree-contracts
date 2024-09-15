@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/ContractPages.sol";
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 contract ContractPagesTest is Test {
     ContractPages public contractPages;
     address public owner;
@@ -360,5 +362,58 @@ contract ContractPagesTest is Test {
         // Test 12 months reservation for short name with new base cost
         cost = contractPages.calculateReservationCost(12, "short");
         assertEq(cost, 0.96 ether, "12 months short name cost incorrect with new base cost");
+    }
+
+    function testUpdateReservationCost() public {
+        uint256 newCost = 0.01 ether;
+        contractPages.updateReservationCost(newCost);
+        assertEq(contractPages.reservationCostPerMonth(), newCost);
+    }
+
+    function testUpdateReservationCostNonOwner() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        contractPages.updateReservationCost(0.01 ether);
+    }
+
+    function testUpdateReservationDiscount() public {
+        uint256 newDiscount = 30;
+        contractPages.updateReservationDiscount(newDiscount);
+        assertEq(contractPages.reservationDiscount12Months(), newDiscount);
+    }
+
+    function testUpdateReservationDiscountExceedsLimit() public {
+        vm.expectRevert("Discount cannot exceed 100%");
+        contractPages.updateReservationDiscount(101);
+    }
+
+    function testUpdateReservationDiscountNonOwner() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        contractPages.updateReservationDiscount(30);
+    }
+
+    function testUpdateShortNameThreshold() public {
+        uint256 newThreshold = 5;
+        contractPages.updateShortNameThreshold(newThreshold);
+        assertEq(contractPages.shortNameThreshold(), newThreshold);
+    }
+
+    function testUpdateShortNameThresholdNonOwner() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        contractPages.updateShortNameThreshold(5);
+    }
+
+    function testUpdateShortNameMultiplier() public {
+        uint256 newMultiplier = 15;
+        contractPages.updateShortNameMultiplier(newMultiplier);
+        assertEq(contractPages.shortNameMultiplier(), newMultiplier);
+    }
+
+    function testUpdateShortNameMultiplierNonOwner() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        contractPages.updateShortNameMultiplier(15);
     }
 }

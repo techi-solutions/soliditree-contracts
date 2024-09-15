@@ -24,12 +24,12 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
     mapping(bytes32 => string) private _pageNames;
 
     uint256 public reservationCostPerMonth;
-    uint256 public constant RESERVATION_DISCOUNT_12_MONTHS = 20; // 20% discount
+    uint256 public reservationDiscount12Months;
 
     mapping(bytes32 => uint256) public nameReservationExpiry;
 
-    uint256 public constant SHORT_NAME_THRESHOLD = 6;
-    uint256 public constant SHORT_NAME_MULTIPLIER = 10;
+    uint256 public shortNameThreshold;
+    uint256 public shortNameMultiplier;
 
     ////////////////////////////////
     // EVENTS
@@ -43,6 +43,10 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
     event NameReleased(bytes32 indexed pageId, string name);
 
     event ReservationCostUpdated(uint256 newCost);
+    event ReservationDiscountUpdated(uint256 newDiscount); // New event for discount updates
+
+    event ShortNameThresholdUpdated(uint256 newThreshold);
+    event ShortNameMultiplierUpdated(uint256 newMultiplier);
 
     ////////////////////////////////
     // CONSTRUCTOR
@@ -58,6 +62,9 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
         _grantRole(PAGES_ADMIN_ROLE, _owner);
 
         reservationCostPerMonth = 0.005 ether; // Set initial cost
+        reservationDiscount12Months = 20; // Set initial discount to 20%
+        shortNameThreshold = 6; // Set initial short name threshold
+        shortNameMultiplier = 10; // Set initial short name multiplier
     }
 
     ////////////////////////////////
@@ -211,14 +218,14 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
             baseCost = reservationCostPerMonth;
         } else if (_months == 12) {
             uint256 annualCost = reservationCostPerMonth * 12;
-            uint256 discount = (annualCost * RESERVATION_DISCOUNT_12_MONTHS) / 100;
+            uint256 discount = (annualCost * reservationDiscount12Months) / 100; // Use the variable instead of constant
             baseCost = annualCost - discount;
         } else {
             revert("Invalid reservation period");
         }
 
-        if (bytes(_name).length < SHORT_NAME_THRESHOLD) {
-            return baseCost * SHORT_NAME_MULTIPLIER;
+        if (bytes(_name).length < shortNameThreshold) {
+            return baseCost * shortNameMultiplier;
         }
 
         return baseCost;
@@ -403,6 +410,37 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
     function updateReservationCost(uint256 _newCost) public onlyOwner {
         reservationCostPerMonth = _newCost;
         emit ReservationCostUpdated(_newCost);
+    }
+
+    /**
+     * @dev Updates the reservation discount for 12 months.
+     * @param _newDiscount The new discount percentage for 12-month reservations.
+     * @notice This function can only be called by the contract owner.
+     */
+    function updateReservationDiscount(uint256 _newDiscount) public onlyOwner {
+        require(_newDiscount <= 100, "Discount cannot exceed 100%");
+        reservationDiscount12Months = _newDiscount;
+        emit ReservationDiscountUpdated(_newDiscount);
+    }
+
+    /**
+     * @dev Updates the short name threshold.
+     * @param _newThreshold The new threshold for short names.
+     * @notice This function can only be called by the contract owner.
+     */
+    function updateShortNameThreshold(uint256 _newThreshold) public onlyOwner {
+        shortNameThreshold = _newThreshold;
+        emit ShortNameThresholdUpdated(_newThreshold);
+    }
+
+    /**
+     * @dev Updates the short name multiplier.
+     * @param _newMultiplier The new multiplier for short names.
+     * @notice This function can only be called by the contract owner.
+     */
+    function updateShortNameMultiplier(uint256 _newMultiplier) public onlyOwner {
+        shortNameMultiplier = _newMultiplier;
+        emit ShortNameMultiplierUpdated(_newMultiplier);
     }
 
     ////////////////////////////////
