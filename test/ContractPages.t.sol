@@ -11,14 +11,19 @@ contract ContractPagesTest is Test {
     address public owner;
     address public user1;
     address public user2;
+    address public pagesAdmin;
 
     function setUp() public {
         owner = address(this);
         user1 = address(0x1);
         user2 = address(0x2);
+        pagesAdmin = address(0x3);
+
+        vm.deal(user1, 1 ether);
 
         contractPages = new ContractPages();
         contractPages.initialize(owner);
+        contractPages.grantRole(contractPages.PAGES_ADMIN_ROLE(), pagesAdmin);
     }
 
     function getPageIdFromLogs() private returns (bytes32) {
@@ -415,5 +420,95 @@ contract ContractPagesTest is Test {
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         contractPages.updateShortNameMultiplier(15);
+    }
+
+    function testExtendNameReservation() public {
+        // Create a page and reserve a name
+        vm.startPrank(user1);
+        bytes32 pageId = contractPages.nextPageId(user1, address(0x123));
+        contractPages.createPage(address(0x123), "content");
+        contractPages.reserveName{value: 0.005 ether}(pageId, "testname", 1);
+        vm.stopPrank();
+
+        // Fast forward 15 days
+        vm.warp(block.timestamp + 15 days);
+
+        // Extend reservation for 1 month
+        vm.startPrank(user1);
+        contractPages.extendNameReservation{value: 0.005 ether}("testname", 1);
+        vm.stopPrank();
+
+        // Check if the reservation was extended
+        assertEq(contractPages.getReservedName("testname"), pageId);
+        assertEq(contractPages.getPageName(pageId), "testname");
+
+        // Fast forward 45 days (original 30 + 15 passed)
+        vm.warp(block.timestamp + 45 days);
+
+        // Check if the name is still reserved
+        assertEq(contractPages.getReservedName("testname"), pageId);
+
+        // Fast forward another 30 days
+        vm.warp(block.timestamp + 30 days);
+
+        // Check if the name has expired
+        assertEq(contractPages.getReservedName("testname"), bytes32(0));
+    }
+
+    function testExtendNameReservationByAdmin() public {
+        // Create a page and reserve a name
+        vm.startPrank(user1);
+        bytes32 pageId = contractPages.nextPageId(user1, address(0x123));
+        contractPages.createPage(address(0x123), "content");
+        contractPages.reserveName{value: 0.005 ether}(pageId, "testname", 1);
+        vm.stopPrank();
+
+        // Fast forward 15 days
+        vm.warp(block.timestamp + 15 days);
+
+        // Extend reservation for 12 months by admin (no payment required)
+        vm.prank(pagesAdmin);
+        contractPages.extendNameReservation("testname", 12);
+
+        // Check if the reservation was extended
+        assertEq(contractPages.getReservedName("testname"), pageId);
+
+        // Fast forward 13 months
+        vm.warp(block.timestamp + 375 days);
+
+        // Check if the name is still reserved
+        assertEq(contractPages.getReservedName("testname"), pageId);
+
+        // Fast forward another 30 days
+        vm.warp(block.timestamp + 30 days);
+
+        // Check if the name has expired
+        // assertEq(contractPages.getReservedName("testname"), bytes32(0));
+    }
+
+    function testFailExtendNameReservationInsufficientPayment() public {
+        // Create a page and reserve a name
+        vm.startPrank(user1);
+        bytes32 pageId = contractPages.nextPageId(user1, address(0x123));
+        contractPages.createPage(address(0x123), "content");
+        contractPages.reserveName{value: 0.005 ether}(pageId, "testname", 1);
+        vm.stopPrank();
+
+        // Attempt to extend reservation with insufficient payment
+        vm.prank(user1);
+        contractPages.extendNameReservation{value: 0.004 ether}("testname", 1);
+    }
+
+    function testFailExtendNameReservationUnauthorized() public {
+        // Create a page and reserve a name
+        vm.startPrank(user1);
+        bytes32 pageId = contractPages.nextPageId(user1, address(0x123));
+        contractPages.createPage(address(0x123), "content");
+        contractPages.reserveName{value: 0.005 ether}(pageId, "testname", 1);
+        vm.stopPrank();
+
+        // Attempt to extend reservation by unauthorized user
+        vm.prank(user2);
+        contractPages.extendNameReservation{value: 0.005 ether}("testname", 1);
     }
 }

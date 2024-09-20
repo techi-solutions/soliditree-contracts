@@ -207,6 +207,49 @@ contract ContractPages is Initializable, OwnableUpgradeable, UUPSUpgradeable, Ac
     }
 
     /**
+    * @dev Extends the reservation of a name for a page.
+    * @param _name The name to extend the reservation for.
+    * @param _months The number of months to extend the reservation (1 or 12).
+    * @notice This function can only be called by the page owner, contract owner, or pages admin, and addresses that are not blacklisted.
+    */
+    function extendNameReservation(string memory _name, uint256 _months)
+        public
+        payable
+        onlyNotBlacklisted
+    {
+        bytes32 pageId = getReservedName(_name);
+        require(pageId != bytes32(0), "Name not reserved or expired");
+        require(_months == 1 || _months == 12, "Extension must be for 1 or 12 months");
+
+        // Check if the caller is authorized
+        require(
+            msg.sender == pageOwners[pageId] || msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender),
+            "Only page owner, contract owner, or pages admin can extend reservation"
+        );
+
+        uint256 cost = calculateReservationCost(_months, _name);
+
+        // Check if the caller is the owner or pages admin
+        bool isOwnerOrAdmin = (msg.sender == owner() || hasRole(PAGES_ADMIN_ROLE, msg.sender));
+
+        // Only require payment if the caller is not the owner or pages admin
+        if (!isOwnerOrAdmin) {
+            require(msg.value >= cost, "Insufficient payment");
+        }
+
+        // Extend the expiry timestamp
+        uint256 newExpiryTimestamp = nameReservationExpiry[pageId] + (_months * 30 days);
+        nameReservationExpiry[pageId] = newExpiryTimestamp;
+
+        emit NameReserved(pageId, _name, newExpiryTimestamp);
+
+        // Refund excess payment if applicable
+        if (!isOwnerOrAdmin && msg.value > cost) {
+            payable(msg.sender).transfer(msg.value - cost);
+        }
+    }
+
+    /**
      * @dev Calculates the cost of name reservation based on the number of months and the name length.
      * @param _months The number of months for reservation (1 or 12).
      * @param _name The name to be reserved.
