@@ -24,7 +24,7 @@ contract ContractPagesDeploy is Script {
         bytes memory proxyBytecode =
             abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(implementation), initData));
 
-        bytes32 salt = keccak256(abi.encodePacked("DINTERFACE_CONTRACT_PAGES_1"));
+        bytes32 salt = keccak256(abi.encodePacked("DINTERFACE_CONTRACT_PAGES_2"));
 
         // Deploy the proxy using Create2
         address proxyAddress = Create2(vm.envAddress("CREATE2_FACTORY_ADDRESS")).deploy(salt, proxyBytecode);
